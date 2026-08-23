@@ -2,6 +2,7 @@
 
 import React from 'react';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import Image from 'next/image';
 import MapViewer from '@/components/MapViewer';
 import mapData from '@/data/master_map_data.json';
 import dummyWavesData from '@/data/dummy_waves.json';
@@ -75,24 +76,20 @@ export default function Home() {
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-[#0a1a4b] p-3 text-[#202938] sm:p-5">
-      <header className="mx-auto flex w-full max-w-[1600px] shrink-0 flex-col gap-5 rounded-2xl border border-white/15 bg-[#0a1a4b] px-5 py-5 text-white lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex items-center gap-4">
-          <div className="grid h-11 w-11 place-items-center rounded-xl border border-[#ff6600] text-[#ff6600]"><LogisticsIcon name="route" /></div>
-          <div>
-            <p className="text-lg font-semibold tracking-[-0.03em]">nex<span className="text-[#ff6600]">WAVE</span></p>
-            <p className="text-xs font-light tracking-[0.08em] text-[#c5d1ec]">OPERATIONS CONTROL</p>
-          </div>
+      <header className="mx-auto flex w-full max-w-[1600px] shrink-0 flex-col gap-2 rounded-2xl border border-white/15 bg-[#0a1a4b] px-4 py-2 text-white lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center">
+          <Image src="/logo-nexwave.svg" alt="nexWAVE Operations Control" width={210} height={54} className="h-auto w-[104px] sm:w-[132px]" priority />
         </div>
 
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
-          <div className="border-l border-white/20 pl-4"><p className="text-xs text-[#c5d1ec]">WAVE AKTIF</p><p className="font-medium">{currentWave.wave_id}</p></div>
-          <div className="border-l border-white/20 pl-4"><p className="text-xs text-[#c5d1ec]">PROGRES</p><p className="font-medium">{pickedCount}/{currentWave.route.length} lokasi</p></div>
-          <div className="border-l border-white/20 pl-4"><p className="text-xs text-[#c5d1ec]">POSISI</p><p className="font-medium">{activeLeg ? activeLeg.fromLocationId ?? (activeLeg.fromNode === IO_NODE ? 'I/O' : activeLeg.fromNode) : 'I/O'}</p></div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <div className="border-l border-white/20 pl-3"><p className="text-[9px] leading-none text-[#c5d1ec]">WAVE AKTIF</p><p className="mt-0.5 text-[13px] font-medium leading-none">{currentWave.wave_id}</p></div>
+          <div className="border-l border-white/20 pl-3"><p className="text-[9px] leading-none text-[#c5d1ec]">PROGRES</p><p className="mt-0.5 text-[13px] font-medium leading-none">{pickedCount}/{currentWave.route.length} lokasi</p></div>
+          <div className="border-l border-white/20 pl-3"><p className="text-[9px] leading-none text-[#c5d1ec]">POSISI</p><p className="mt-0.5 text-[13px] font-medium leading-none">{activeLeg ? activeLeg.fromLocationId ?? (activeLeg.fromNode === IO_NODE ? 'I/O' : activeLeg.fromNode) : 'I/O'}</p></div>
         </div>
 
-        <div className="flex items-center gap-1 rounded-xl border border-white/20 p-1" aria-label="Pilih level gudang">
+        <div className="flex items-center gap-1 rounded-xl border border-white/20 p-0.5" aria-label="Pilih level gudang">
           {[1, 2, 3, 4].map((level) => (
-            <button key={level} onClick={() => setActiveLevel(level)} aria-pressed={activeLevel === level} className={`min-w-10 rounded-lg px-3 py-2 text-xs font-medium transition ${activeLevel === level ? 'bg-[#ff6600] text-white' : 'text-[#dce6fa] hover:bg-white/10'}`}>
+            <button key={level} onClick={() => setActiveLevel(level)} aria-pressed={activeLevel === level} className={`min-w-7 rounded-lg px-2 py-1 text-[10px] font-medium transition ${activeLevel === level ? 'bg-[#ff6600] text-white' : 'text-[#dce6fa] hover:bg-white/10'}`}>
               L{level}
             </button>
           ))}
@@ -153,6 +150,19 @@ export default function Home() {
           <div className="shrink-0 flex flex-col gap-4 border-b border-[#d8dee8] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div><p className="text-xs font-medium uppercase tracking-[0.12em] text-[#0056d6]">Navigasi berantai</p><h2 className="mt-1 flex items-center gap-2 text-2xl font-medium tracking-[-0.035em] text-[#0056d6]">{activeRouteEndpoints ? <><span>{activeRouteEndpoints.from}</span><ArrowForwardIcon fontSize="small" /><span>{activeRouteEndpoints.to}</span></> : (isWaveComplete ? 'Kembali ke I/O' : 'Rute belum tersedia')}</h2></div>
             <div className="flex items-center gap-2 text-sm text-[#526176]"><LogisticsIcon name="package" className="text-[#ff6600]" />{activeLeg?.kind === 'return' ? 'Semua lokasi dipilih — kembali ke I/O' : 'Selesaikan lokasi aktif untuk lanjut'}</div>
+          </div>
+          <div className="shrink-0 border-b border-[#d8dee8] bg-[#f7f9fc] px-5 py-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#0056d6]">Leg rute aktif</p>
+                <p className="mt-1 flex items-center gap-2 text-lg font-semibold text-[#202938]">
+                  {activeRouteEndpoints ? <><span>{activeRouteEndpoints.from}</span><ArrowForwardIcon fontSize="small" /><span>{activeRouteEndpoints.to}</span></> : 'Tidak ada leg yang aktif'}
+                </p>
+              </div>
+              <p className="max-w-md text-sm text-[#687386]">
+                Drag untuk menggeser peta dan scroll untuk zoom. Info rute dipindah ke panel ini supaya area factory tetap bersih.
+              </p>
+            </div>
           </div>
           {unmappedLocations.length > 0 && <p className="shrink-0 border-b border-[#f5b78d] bg-[#fff1e8] px-5 py-3 text-sm text-[#9b3c00]">Lokasi tidak ditemukan di peta: {unmappedLocations.map((step) => step.location_id).join(', ')}.</p>}
           <div className="min-h-0 flex-1"><MapViewer activeLevel={activeLevel} route={currentWave.route} routeLegs={routeLegs} activeLegIndex={activeLegIndex} /></div>
