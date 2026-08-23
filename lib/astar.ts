@@ -1,4 +1,4 @@
-import mapData from '@/data/master_map_data.json';
+import mapData from '../data/master_map_data.json';
 
 type Graph = typeof mapData.graph;
 
