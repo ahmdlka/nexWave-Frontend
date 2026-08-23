@@ -1,0 +1,62 @@
+[
+  {
+    "wave_id": "WAVE-DEMO-001",
+    "status": "in_progress",
+    "total_items": 14,
+    "total_distance": 2148.0,
+    "route": [
+      {
+        "step": 1,
+        "location_id": "F-13-11",
+        "product_ref": "2LPO6D",
+        "qty": 2,
+        "floor": 1,
+        "x": 368,
+        "y": 392,
+        "status": "pending",
+        "instruction": "Ambil 2 unit 2LPO6D di F-13-11"
+      },
+      {
+        "step": 2,
+        "location_id": "D-13-21",
+        "product_ref": "1D2ILZ",
+        "qty": 5,
+        "floor": 2,
+        "x": 368,
+        "y": 212,
+        "status": "pending",
+        "instruction": "Naik ke Lantai 2 — Ambil 5 unit 1D2ILZ di D-13-21"
+      }
+    ]
+  },
+  {
+    "wave_id": "WAVE-DEMO-002",
+    "status": "pending",
+    "total_items": 8,
+    "total_distance": 1200.0,
+    "route": [
+      {
+        "step": 1,
+        "location_id": "L-06-13",
+        "product_ref": "PROD-A",
+        "qty": 3,
+        "floor": 1,
+        "x": 643,
+        "y": 402,
+        "status": "pending",
+        "instruction": "Ambil 3 unit PROD-A di L-06-13"
+      },
+      {
+        "step": 2,
+        "location_id": "Q-07-13",
+        "product_ref": "PROD-B",
+        "qty": 2,
+        "floor": 1,
+        "x": 581,
+        "y": 192,
+        "status": "pending",
+        "instruction": "Ambil 2 unit PROD-B di Q-07-13"
+      }
+    ]
+  }
+]
