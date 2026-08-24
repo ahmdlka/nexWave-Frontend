@@ -8,6 +8,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import MapViewer from '@/components/MapViewer';
 import mapData from '@/data/master_map_data.json';
 import { API_BASE_URL, apiHeaders, getApiError } from '@/lib/api';
+import { getPickerRoute, confirmPickDirect, reportProblemDirect } from '@/lib/supabase-queries';
 import { buildRouteLegs } from '@/lib/route-legs';
 import { supabase } from '@/lib/supabase';
 
@@ -27,13 +28,11 @@ export default function OperatorPage() {
   const [submitting, setSubmitting] = useState(false);
   const [activeLevel, setActiveLevel] = useState(1);
 
-  const loadWave = useCallback(async (accessToken: string, id: number) => {
+  const loadWave = useCallback(async (id: number) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/picker/${id}/next`, { headers: apiHeaders(accessToken) });
-      if (!response.ok) throw new Error(await getApiError(response));
-      const data = await response.json() as PickerWave & { message?: string };
+      const data = await getPickerRoute(id) as PickerWave & { message?: string };
       if (!data.wave_id || data.status === 'no_wave') {
         setWave(null);
         setMessage(data.message || 'Tidak ada wave tersedia.');
@@ -73,7 +72,7 @@ export default function OperatorPage() {
         setToken(session.access_token);
         setProfile(userProfile);
         setPickerId(picker.picker_id);
-        await loadWave(session.access_token, picker.picker_id);
+        await loadWave(picker.picker_id);
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : 'Gagal memverifikasi akses operator.');
         setLoading(false);
@@ -95,7 +94,7 @@ export default function OperatorPage() {
     try {
       const response = await fetch(`${API_BASE_URL}${path}`, { method: 'POST', headers: apiHeaders(token, true), body: JSON.stringify(body) });
       if (!response.ok) throw new Error(await getApiError(response));
-      await loadWave(token, pickerId);
+      await loadWave(pickerId);
       return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Aksi tidak dapat diproses.');
@@ -106,15 +105,33 @@ export default function OperatorPage() {
   }
 
   async function confirmPick() {
-    if (!wave || !activeStep) return;
-    await submit('/api/pick/confirm', { wave_id: wave.wave_id, location_id: activeStep.location_id, qty_actual: activeStep.qty });
+    if (!wave || !activeStep || !pickerId) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await confirmPickDirect(wave.wave_id, activeStep.location_id);
+      await loadWave(pickerId);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Aksi tidak dapat diproses.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function reportProblem() {
     if (!wave || !activeStep) return;
     const reason = window.prompt('Jelaskan kendala di lokasi ini:', 'stok_habis');
-    if (!reason) return;
-    await submit('/api/wave/problem', { wave_id: wave.wave_id, location_id: activeStep.location_id, reason });
+    if (!reason || !pickerId) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await reportProblemDirect(wave.wave_id, activeStep.location_id, reason);
+      await loadWave(pickerId);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Aksi tidak dapat diproses.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function finishWave() {
@@ -131,7 +148,7 @@ export default function OperatorPage() {
 
   return <main className="flex h-dvh flex-col gap-3 overflow-hidden bg-[#0a1a4b] p-3 text-[#202938] sm:p-5">
     <header className="mx-auto flex w-full max-w-[1300px] shrink-0 items-center justify-between rounded-md border border-white/15 px-4 py-2 text-white"><Image src="/logo-nexwave.svg" alt="nexWAVE Operations" width={190} height={48} priority /><div className="flex items-center gap-3"><Typography variant="body2" sx={{ opacity: .8 }}>{profile?.full_name || profile?.email}</Typography><Button size="small" variant="outlined" startIcon={<LogoutIcon />} onClick={logout} sx={{ color: 'white', borderColor: 'rgba(255,255,255,.4)' }}>Keluar</Button></div></header>
-    {error ? <Box className="mx-auto flex w-full max-w-[1300px] flex-1 flex-col items-center justify-center rounded-md bg-red-500/10 p-6 text-center text-white"><Typography variant="h6">Rute tidak tersedia</Typography><Typography sx={{ mt: 1, opacity: .8 }}>{error}</Typography><Button variant="contained" sx={{ mt: 2 }} onClick={() => token && pickerId && loadWave(token, pickerId)}>Coba lagi</Button></Box> : !wave ? <Box className="mx-auto flex w-full max-w-[1300px] flex-1 flex-col items-center justify-center rounded-md bg-white p-6 text-center"><Typography variant="h6">Belum ada wave</Typography><Typography className="mt-1 text-[#687386]">{message}</Typography><Button sx={{ mt: 2 }} onClick={() => token && pickerId && loadWave(token, pickerId)}>Periksa lagi</Button></Box> : <div className="mx-auto grid min-h-0 w-full max-w-[1300px] flex-1 gap-3 lg:grid-cols-[360px_minmax(0,1fr)]">
+    {error ? <Box className="mx-auto flex w-full max-w-[1300px] flex-1 flex-col items-center justify-center rounded-md bg-red-500/10 p-6 text-center text-white"><Typography variant="h6">Rute tidak tersedia</Typography><Typography sx={{ mt: 1, opacity: .8 }}>{error}</Typography><Button variant="contained" sx={{ mt: 2 }} onClick={() => pickerId && loadWave(pickerId)}>Coba lagi</Button></Box> : !wave ? <Box className="mx-auto flex w-full max-w-[1300px] flex-1 flex-col items-center justify-center rounded-md bg-white p-6 text-center"><Typography variant="h6">Belum ada wave</Typography><Typography className="mt-1 text-[#687386]">{message}</Typography><Button sx={{ mt: 2 }} onClick={() => pickerId && loadWave(pickerId)}>Periksa lagi</Button></Box> : <div className="mx-auto grid min-h-0 w-full max-w-[1300px] flex-1 gap-3 lg:grid-cols-[360px_minmax(0,1fr)]">
       <aside className="min-h-0 overflow-y-auto rounded-md bg-[#f4f6fa] p-4"><p className="text-xs font-bold uppercase tracking-wider text-[#0056d6]">Rute saya · Picker {pickerId}</p><h1 className="mt-1 text-xl font-semibold">{wave.wave_id}</h1><p className="mt-1 text-sm text-[#687386]">{completed}/{wave.route.length} lokasi selesai · {wave.total_items} item</p><div className="mt-4 space-y-2">{wave.route.map((step) => <div key={`${step.step}-${step.location_id}`} className={`rounded border p-3 ${step.location_id === activeStep?.location_id ? 'border-[#ff6600] bg-white' : step.status === 'picked' ? 'border-[#b6cced] bg-[#eaf2ff]' : 'border-[#d8dee8] bg-[#eef1f5]'}`}><p className="font-semibold">{step.step}. {step.location_id}</p><p className="text-xs text-[#687386]">{step.product_ref} · {step.qty} unit · Lantai {step.floor}</p><p className="mt-1 text-xs font-medium uppercase text-[#526176]">{step.status}</p></div>)}</div></aside>
       <section className="flex min-h-0 flex-col overflow-hidden rounded-md bg-white"><div className="flex flex-wrap items-center justify-between gap-3 border-b p-4"><div><p className="text-xs font-bold uppercase tracking-wider text-[#0056d6]">Tugas saat ini</p><h2 className="text-lg font-semibold">{activeStep ? activeStep.instruction : 'Semua lokasi sudah diproses'}</h2></div><div className="flex rounded border p-1">{[1, 2, 3, 4].map((level) => <button key={level} onClick={() => setActiveLevel(level)} className={`rounded px-3 py-1 text-xs ${activeLevel === level ? 'bg-[#ff6600] text-white' : ''}`}>L{level}</button>)}</div></div><div className="flex flex-wrap gap-2 border-b p-3">{activeStep && <><Button variant="contained" disabled={submitting} onClick={confirmPick} sx={{ bgcolor: '#0056d6' }}>Konfirmasi pick</Button><Button variant="outlined" color="warning" disabled={submitting} onClick={reportProblem}>Laporkan masalah</Button></>}<Button variant="outlined" disabled={!canFinish || submitting} onClick={finishWave}>Selesaikan wave</Button></div><div className="min-h-0 flex-1"><MapViewer activeLevel={activeLevel} route={wave.route} routeLegs={routeLegs} activeLegIndex={activeLegIndex} /></div></section>
     </div>}
