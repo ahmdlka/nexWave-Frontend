@@ -11,7 +11,7 @@ export default function AuthCallback() {
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN') {
-        router.push('/');
+        router.replace('/');
       }
     });
 
