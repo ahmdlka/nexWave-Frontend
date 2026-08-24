@@ -42,7 +42,7 @@ flowchart TD
 ## Alur data
 
 1. **Login** — frontend bicara langsung ke Supabase (bukan ke backend), dapat `access_token`. Dua jalur: Google (role `manager`) atau email/password akun dummy (role `operator`). Detail implementasi: [frontend_auth.md](frontend_auth.md).
-2. **Tiap call ke API** — frontend kirim `access_token` sebagai `Authorization: Bearer ...`. Backend verifikasi pakai kunci publik JWKS Supabase (bukan secret bersama), lalu cek role (`profiles.role`) + `picker_id` (`pickers.auth_user_id`) buat nentuin akses.
+2. **Tiap call ke API** — frontend kirim `access_token` sebagai `Authorization: Bearer ...`. Backend verifikasi pakai kunci publik JWKS Supabase (bukan secret bersama), lalu cek role (`users.role`) + `picker_id` (`pickers.auth_user_id`) buat nentuin akses.
 3. **Order masuk** — WMS panggil `POST /api/order/new` (HMAC, bukan Bearer) → insert ke `orders` → PPO batching agent putuskan `add` ke wave berjalan atau `close_wave`. Wave yang closed dapat baris `wave_locations`, lalu di-assign ke picker available (rute dihitung Attention Routing Model + Nav graph).
 4. **Picker kerja** — operator `GET /api/picker/{id}/next` (cuma punya sendiri) → `POST /api/pick/confirm` per lokasi → update `wave_locations`/`orders`.
 5. **Realtime** — perubahan di DB (poin 3-4) otomatis sampai ke frontend yang subscribe lewat Supabase Realtime, tanpa polling.

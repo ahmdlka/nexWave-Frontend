@@ -24,11 +24,24 @@ function LogisticsIcon({ name, className = 'h-5 w-5' }: { name: IconName; classN
 
 export default function Home() {
   const [activeLevel, setActiveLevel] = React.useState(1);
-  const [activeWaveId, setActiveWaveId] = React.useState(dummyWavesData[0].wave_id);
+  const [activeWaveId, setActiveWaveId] = React.useState(dummyWavesData[0]?.wave_id ?? '');
   const [waves, setWaves] = React.useState(dummyWavesData);
 
-  const currentWave = waves.find((wave) => wave.wave_id === activeWaveId) ?? waves[0];
-  const pickedCount = currentWave.route.filter((step) => step.status === 'picked').length;
+  const currentWave = React.useMemo(
+    () => waves.find((wave) => wave.wave_id === activeWaveId) ?? waves[0],
+    [waves, activeWaveId]
+  );
+
+  const pickedCount = React.useMemo(
+    () => currentWave.route.filter((step) => step.status === 'picked').length,
+    [currentWave.route]
+  );
+
+  const pickedItemsCount = React.useMemo(
+    () => currentWave.route.filter((step) => step.status === 'picked').reduce((sum, step) => sum + (step.qty || 0), 0),
+    [currentWave.route]
+  );
+
   const isWaveComplete = currentWave.route.length > 0 && pickedCount === currentWave.route.length;
   const completion = currentWave.route.length ? Math.round((pickedCount / currentWave.route.length) * 100) : 0;
 
@@ -37,11 +50,15 @@ export default function Home() {
     [currentWave.route, isWaveComplete],
   );
 
+  const activeStep = React.useMemo(
+    () => currentWave.route.find((step) => step.status !== 'picked'),
+    [currentWave.route]
+  );
+
   const activeLegIndex = React.useMemo(() => {
-    const nextStep = currentWave.route.find((step) => step.status !== 'picked');
-    if (nextStep) return routeLegs.findIndex((leg) => leg.toLocationId === nextStep.location_id);
+    if (activeStep) return routeLegs.findIndex((leg) => leg.toLocationId === activeStep.location_id);
     return routeLegs.findIndex((leg) => leg.kind === 'return');
-  }, [currentWave.route, routeLegs]);
+  }, [activeStep, routeLegs]);
 
   const activeLeg = activeLegIndex >= 0 ? routeLegs[activeLegIndex] : undefined;
   const activeRouteEndpoints = activeLeg
@@ -76,35 +93,21 @@ export default function Home() {
 
   return (
     <main className="flex h-dvh flex-col overflow-hidden bg-[#0a1a4b] p-3 text-[#202938] sm:p-5">
-      <header className="mx-auto flex w-full max-w-[1600px] shrink-0 flex-col gap-2 rounded-2xl border border-white/15 bg-[#0a1a4b] px-4 py-2 text-white lg:flex-row lg:items-center lg:justify-between">
+      <header className="mx-auto flex w-full max-w-[1600px] shrink-0 flex-col gap-2 rounded-md border border-white/15 bg-[#0a1a4b] px-4 py-2 text-white lg:flex-row lg:items-center lg:justify-between">
         <div className="flex items-center">
-          <Image src="/logo-nexwave.svg" alt="nexWAVE Operations Control" width={210} height={54} className="h-auto w-[104px] sm:w-[132px]" priority />
-        </div>
-
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          <div className="border-l border-white/20 pl-3"><p className="text-[9px] leading-none text-[#c5d1ec]">WAVE AKTIF</p><p className="mt-0.5 text-[13px] font-medium leading-none">{currentWave.wave_id}</p></div>
-          <div className="border-l border-white/20 pl-3"><p className="text-[9px] leading-none text-[#c5d1ec]">PROGRES</p><p className="mt-0.5 text-[13px] font-medium leading-none">{pickedCount}/{currentWave.route.length} lokasi</p></div>
-          <div className="border-l border-white/20 pl-3"><p className="text-[9px] leading-none text-[#c5d1ec]">POSISI</p><p className="mt-0.5 text-[13px] font-medium leading-none">{activeLeg ? activeLeg.fromLocationId ?? (activeLeg.fromNode === IO_NODE ? 'I/O' : activeLeg.fromNode) : 'I/O'}</p></div>
-        </div>
-
-        <div className="flex items-center gap-1 rounded-xl border border-white/20 p-0.5" aria-label="Pilih level gudang">
-          {[1, 2, 3, 4].map((level) => (
-            <button key={level} onClick={() => setActiveLevel(level)} aria-pressed={activeLevel === level} className={`min-w-7 rounded-lg px-2 py-1 text-[10px] font-medium transition ${activeLevel === level ? 'bg-[#ff6600] text-white' : 'text-[#dce6fa] hover:bg-white/10'}`}>
-              L{level}
-            </button>
-          ))}
+          <Image src="/logo-nexwave.svg" alt="nexWAVE Operations Control" width={210} height={54} className="h-auto w-[156px] sm:w-[198px]" priority />
         </div>
       </header>
 
       <div className="mx-auto grid min-h-0 w-full max-w-[1600px] flex-1 gap-3 pt-3 lg:grid-cols-[370px_minmax(0,1fr)]">
-        <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-[#cbd5e1] bg-[#f4f6fa]">
+        <aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-[#cbd5e1] bg-[#f4f6fa]">
           <div className="shrink-0 border-b border-[#d8dee8] bg-white px-5 py-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.12em] text-[#0056d6]"><LogisticsIcon name="warehouse" className="h-4 w-4" />Manifest pengambilan</p>
                 <h1 className="mt-1 text-xl font-semibold tracking-[-0.03em] text-[#202938]">Urutan kerja wave</h1>
               </div>
-              <span className="rounded-lg border border-[#cbd5e1] px-2 py-1 text-[11px] font-medium text-[#526176]">I/O: {IO_NODE}</span>
+              <span className="rounded-md border border-[#cbd5e1] px-2 py-1 text-[11px] font-medium text-[#526176]">I/O: {IO_NODE}</span>
             </div>
             <div className="mt-5 h-1.5 bg-[#dce3ee]" aria-label={`${completion}% lokasi telah dipilih`}><div className="h-full bg-[#ff6600] transition-all" style={{ width: `${completion}%` }} /></div>
             <p className="mt-2 text-xs text-[#687386]">{completion}% selesai · lokasi harus diproses berurutan</p>
@@ -116,10 +119,10 @@ export default function Home() {
                 const selected = wave.wave_id === activeWaveId;
                 const complete = wave.status === 'done';
                 return (
-                  <button key={wave.wave_id} onClick={() => setActiveWaveId(wave.wave_id)} className={`w-full rounded-xl border p-4 text-left transition ${selected ? 'border-[#0056d6] bg-[#eaf2ff]' : 'border-[#d8dee8] bg-white hover:border-[#8fb3ee]'}`}>
+                  <button key={wave.wave_id} onClick={() => setActiveWaveId(wave.wave_id)} className={`w-full rounded-md border p-4 text-left transition ${selected ? 'border-[#0056d6] bg-[#eaf2ff]' : 'border-[#d8dee8] bg-white hover:border-[#8fb3ee]'}`}>
                     <div className="flex items-start justify-between gap-3">
                       <div><p className="font-semibold text-[#202938]">{wave.wave_id}</p><p className="mt-1 text-xs text-[#687386]">{wave.route.length} lokasi · {wave.total_items} item</p></div>
-                      <span className={`rounded-lg border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.08em] ${complete ? 'border-[#8ab5f2] bg-[#eaf2ff] text-[#0056d6]' : 'border-[#f5b78d] bg-[#fff1e8] text-[#c64d00]'}`}>{complete ? 'Selesai' : 'Berjalan'}</span>
+                      <span className={`rounded-md border px-2 py-1 text-[10px] font-medium uppercase tracking-[0.08em] ${complete ? 'border-[#8ab5f2] bg-[#eaf2ff] text-[#0056d6]' : 'border-[#f5b78d] bg-[#fff1e8] text-[#c64d00]'}`}>{complete ? 'Selesai' : 'Berjalan'}</span>
                     </div>
                   </button>
                 );
@@ -134,7 +137,7 @@ export default function Home() {
                   const isNext = !isPicked && (index === 0 || currentWave.route[index - 1].status === 'picked');
                   return (
                     <li key={`${step.location_id}-${index}`}>
-                      <label className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${isPicked ? 'border-[#b6cced] bg-[#eaf2ff]' : isNext ? 'border-[#ff6600] bg-white' : 'border-[#d8dee8] bg-[#eef1f5] opacity-65'}`}>
+                      <label className={`flex cursor-pointer items-center gap-3 rounded-md border p-3 transition ${isPicked ? 'border-[#b6cced] bg-[#eaf2ff]' : isNext ? 'border-[#ff6600] bg-white' : 'border-[#d8dee8] bg-[#eef1f5] opacity-65'}`}>
                         <input type="checkbox" checked={isPicked} disabled={!isPicked && !isNext} onChange={() => handleToggleLocation(currentWave.wave_id, index)} className="h-4 w-4 accent-[#0056d6]" />
                         <span className="min-w-0 flex-1"><span className={`flex items-center gap-1.5 text-sm font-medium ${isPicked ? 'text-[#0056d6] line-through' : 'text-[#202938]'}`}><LogisticsIcon name="pin" className="h-4 w-4 shrink-0" />{index + 1}. {step.location_id}</span><span className="mt-0.5 block text-xs text-[#687386]">{step.product_ref} · {step.qty} unit · Lantai {step.floor}</span></span>
                       </label>
@@ -146,22 +149,86 @@ export default function Home() {
           </div>
         </aside>
 
-        <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-[#cbd5e1] bg-white">
-          <div className="shrink-0 flex flex-col gap-4 border-b border-[#d8dee8] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-            <div><p className="text-xs font-medium uppercase tracking-[0.12em] text-[#0056d6]">Navigasi berantai</p><h2 className="mt-1 flex items-center gap-2 text-2xl font-medium tracking-[-0.035em] text-[#0056d6]">{activeRouteEndpoints ? <><span>{activeRouteEndpoints.from}</span><ArrowForwardIcon fontSize="small" /><span>{activeRouteEndpoints.to}</span></> : (isWaveComplete ? 'Kembali ke I/O' : 'Rute belum tersedia')}</h2></div>
-            <div className="flex items-center gap-2 text-sm text-[#526176]"><LogisticsIcon name="package" className="text-[#ff6600]" />{activeLeg?.kind === 'return' ? 'Semua lokasi dipilih — kembali ke I/O' : 'Selesaikan lokasi aktif untuk lanjut'}</div>
-          </div>
-          <div className="shrink-0 border-b border-[#d8dee8] bg-[#f7f9fc] px-5 py-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-              <div>
-                <p className="text-xs font-medium uppercase tracking-[0.12em] text-[#0056d6]">Leg rute aktif</p>
-                <p className="mt-1 flex items-center gap-2 text-lg font-semibold text-[#202938]">
-                  {activeRouteEndpoints ? <><span>{activeRouteEndpoints.from}</span><ArrowForwardIcon fontSize="small" /><span>{activeRouteEndpoints.to}</span></> : 'Tidak ada leg yang aktif'}
+        <section className="flex min-h-0 flex-col overflow-hidden rounded-md border border-[#cbd5e1] bg-white">
+          <div className="shrink-0 flex flex-col gap-4 border-b border-[#d8dee8] px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+            {/* Kartu-Kartu Statistik */}
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Card 1: Wave Aktif */}
+              <div className="rounded-lg border border-[#d8dee8] bg-white px-4 py-2 shadow-sm min-w-[130px]">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#687386]">Wave Aktif</p>
+                <p className="mt-0.5 text-lg font-bold text-[#202938]">{currentWave.wave_id}</p>
+              </div>
+
+              {/* Card 2: Progres Lokasi */}
+              <div className="rounded-lg border border-[#d8dee8] bg-white px-4 py-2 shadow-sm min-w-[140px]">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#687386]">Progres</p>
+                <p className="mt-0.5 text-lg font-bold text-[#202938]">
+                  {pickedCount} <span className="text-xs font-normal text-[#687386]">/ {currentWave.route.length} lokasi</span>
                 </p>
               </div>
-              <p className="max-w-md text-sm text-[#687386]">
-                Drag untuk menggeser peta dan scroll untuk zoom. Info rute dipindah ke panel ini supaya area factory tetap bersih.
-              </p>
+
+              {/* Card 3: Jumlah Item */}
+              <div className="rounded-lg border border-[#0056d6]/20 bg-[#eaf2ff]/50 px-4 py-2 shadow-sm min-w-[140px]">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#0056d6]">Jumlah</p>
+                <p className="mt-0.5 text-lg font-bold text-[#0056d6]">
+                  {pickedItemsCount} <span className="text-xs font-normal text-[#526176]">/ {currentWave.total_items} items</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Pemilih Level Gudang */}
+            <div className="flex items-center gap-1 rounded-md border border-[#cbd5e1]/50 p-0.5 self-start sm:self-auto" aria-label="Pilih level gudang">
+              {[1, 2, 3, 4].map((level) => (
+                <button
+                  key={level}
+                  onClick={() => setActiveLevel(level)}
+                  aria-pressed={activeLevel === level}
+                  className={`min-w-9 rounded-md px-2 py-1 text-[10px] font-medium transition ${
+                    activeLevel === level ? 'bg-[#ff6600] text-white' : 'text-[#202938] hover:bg-[#cbd5e1]/28'
+                  }`}
+                >
+                  L{level}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="shrink-0 border-b border-[#d8dee8] bg-[#f7f9fc] px-5 py-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              {/* Kiri: Leg Rute Aktif */}
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#0056d6]">Leg Rute Aktif</p>
+                <h2 className="mt-0.5 flex items-center gap-2 text-xl font-medium tracking-[-0.035em] text-[#202938]">
+                  {activeRouteEndpoints ? (
+                    <>
+                      <span>{activeRouteEndpoints.from}</span>
+                      <ArrowForwardIcon fontSize="small" />
+                      <span>{activeRouteEndpoints.to}</span>
+                    </>
+                  ) : (
+                    'Tidak ada leg aktif'
+                  )}
+                </h2>
+              </div>
+
+              {/* Kanan: Detail Item (Teks abu-abu pudar & ukuran lebih kecil) */}
+              {activeStep && (
+                <div className="flex items-center gap-6 mr-10">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-[#687386]">Ref Produk</p>
+                    <p className="mt-0.5 text-sm font-semibold text-[#526176]">{activeStep.product_ref}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-[#687386]">Jumlah Pick</p>
+                    <p className="mt-0.5 text-sm font-semibold text-[#526176]">{activeStep.qty} unit</p>
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-[0.1em] text-[#687386]">Lantai</p>
+                    <p className="mt-0.5 text-sm font-semibold text-[#526176]">Lantai {activeStep.floor}</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           {unmappedLocations.length > 0 && <p className="shrink-0 border-b border-[#f5b78d] bg-[#fff1e8] px-5 py-3 text-sm text-[#9b3c00]">Lokasi tidak ditemukan di peta: {unmappedLocations.map((step) => step.location_id).join(', ')}.</p>}
