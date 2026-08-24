@@ -7,9 +7,9 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { Box, IconButton, Paper, Tooltip, Typography } from '@mui/material';
 import mapData from '@/data/master_map_data.json';
 import { getCursorAnchoredScrollOffset, getMapCanvasSize } from '@/lib/map-viewport';
-import type { RouteLeg } from '@/lib/route-legs';
+import { getRouteLegState, type RouteLeg } from '@/lib/route-legs';
 
-type RouteStep = { location_id: string; status: string };
+type RouteStep = { route_item_id?: number; location_id: string; status: string };
 
 interface MapViewerProps {
   activeLevel: number;
@@ -134,20 +134,22 @@ export default function MapViewer({ activeLevel, route, routeLegs, activeLegInde
             <image href="/maps/Jalur_map.svg" x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} />
 
             {legSegments.map((segments, legIndex) => (
-              <g key={routeLegs[legIndex].id}>
-                {segments.map((segment, segmentIndex) => {
-                  const routeState = legIndex < activeLegIndex ? 'completed' : legIndex === activeLegIndex ? 'active' : 'future';
-                  return <line key={`${routeLegs[legIndex].id}-${segmentIndex}`} x1={segment.x1} y1={segment.y1} x2={segment.x2} y2={segment.y2} strokeWidth={routeState === 'active' ? 6 : 4} className={`route-line route-line--${routeState}`} />;
-                })}
-              </g>
+              (() => {
+                const routeState = getRouteLegState(legIndex, activeLegIndex);
+                if (routeState === 'completed') return null;
+
+                return <g key={routeLegs[legIndex].id}>
+                  {segments.map((segment, segmentIndex) => <line key={`${routeLegs[legIndex].id}-${segmentIndex}`} x1={segment.x1} y1={segment.y1} x2={segment.x2} y2={segment.y2} stroke={routeState === 'active' ? '#0056d6' : '#ff6600'} strokeWidth={routeState === 'active' ? 6 : 4} style={{ transition: 'stroke 240ms ease, opacity 240ms ease' }} />)}
+                </g>;
+              })()
             ))}
 
-            {route.map((step) => {
+            {route.map((step, index) => {
               const rack = racks[step.location_id as keyof typeof racks];
               if (!rack) return null;
               const pinColor = step.status === 'picked' ? '#0056d6' : '#ff6600';
               return (
-                <g key={step.location_id} transform={`translate(${rack.actual_x - 12}, ${rack.actual_y - 24})`}>
+                <g key={`${step.route_item_id ?? step.location_id}-${index}`} transform={`translate(${rack.actual_x - 12}, ${rack.actual_y - 24})`}>
                   <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7Zm0 9.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" fill={pinColor} stroke="#ffffff" strokeWidth="2" />
                   <text x="12" y="-7" fontSize="13" fill="#202938" textAnchor="middle" fontWeight="700" paintOrder="stroke" stroke="#ffffff" strokeWidth="3">{step.location_id}</text>
                 </g>

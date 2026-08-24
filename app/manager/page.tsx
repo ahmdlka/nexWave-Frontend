@@ -7,22 +7,22 @@ import { Box, Button, CircularProgress, Typography } from '@mui/material';
 import LogoutIcon from '@mui/icons-material/Logout';
 import MapViewer from '@/components/MapViewer';
 import mapData from '@/data/master_map_data.json';
-import { API_BASE_URL, apiHeaders, getApiError } from '@/lib/api';
 import { buildRouteLegs } from '@/lib/route-legs';
 import { supabase } from '@/lib/supabase';
+import { generateDummyOrders, getActiveWaves, getShiftSummary } from '@/lib/supabase-queries';
 
 type RouteStep = { location_id: string; product_ref: string; qty: number; floor: number; status: string };
+type WaveLocation = Omit<RouteStep, 'floor'> & { z: number };
 type Wave = { wave_id: string; status: string; picker_name: string; total_items: number; total_distance: number; route: RouteStep[] };
 type ShiftSummary = { n_waves: number; waves_done: number; waves_active: number; total_items: number; items_picked: number };
 type ManagerProfile = { full_name: string | null; email: string | null; role: string };
 
-function toWave(data: { wave_id: string; status: string; picker_name: string; total_items: number; total_distance: number; locations: Array<RouteStep & { z: number }> }): Wave {
+function toWave(data: { wave_id: string; status: string; picker_name: string; total_items: number; total_distance: number; locations: WaveLocation[] }): Wave {
   return { ...data, route: data.locations.map(({ z, ...location }) => ({ ...location, floor: z })) };
 }
 
 export default function ManagerPage() {
   const router = useRouter();
-  const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<ManagerProfile | null>(null);
   const [waves, setWaves] = useState<Wave[]>([]);
   const [summary, setSummary] = useState<ShiftSummary | null>(null);
@@ -32,20 +32,14 @@ export default function ManagerPage() {
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadDashboard = useCallback(async (accessToken: string) => {
+  const loadDashboard = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [wavesResponse, summaryResponse] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/wave/active`, { headers: apiHeaders(accessToken) }),
-        fetch(`${API_BASE_URL}/api/shift/summary`, { headers: apiHeaders(accessToken) }),
-      ]);
-      if (!wavesResponse.ok) throw new Error(await getApiError(wavesResponse));
-      if (!summaryResponse.ok) throw new Error(await getApiError(summaryResponse));
-
-      const nextWaves = (await wavesResponse.json()).map(toWave) as Wave[];
+      const [activeWaves, shiftSummary] = await Promise.all([getActiveWaves(), getShiftSummary()]);
+      const nextWaves = activeWaves.map(toWave) as Wave[];
       setWaves(nextWaves);
-      setSummary(await summaryResponse.json() as ShiftSummary);
+      setSummary(shiftSummary as ShiftSummary);
       setActiveWaveId((current) => nextWaves.some((wave) => wave.wave_id === current) ? current : (nextWaves[0]?.wave_id || ''));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Tidak dapat memuat dashboard manager.');
@@ -68,9 +62,8 @@ export default function ManagerPage() {
         if (profileError) throw new Error(`Gagal mengambil profil manager: ${profileError.message}`);
         if (!userProfile || userProfile.role !== 'manager') return router.replace('/');
 
-        setToken(session.access_token);
         setProfile(userProfile);
-        await loadDashboard(session.access_token);
+        await loadDashboard();
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : 'Gagal memverifikasi akses manager.');
         setLoading(false);
@@ -85,12 +78,10 @@ export default function ManagerPage() {
   const activeLegIndex = activeStep ? routeLegs.findIndex((leg) => leg.toLocationId === activeStep.location_id) : -1;
 
   async function generateOrders() {
-    if (!token) return;
     setGenerating(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/dev/generate-orders`, { method: 'POST', headers: apiHeaders(token) });
-      if (!response.ok) throw new Error(await getApiError(response));
-      await loadDashboard(token);
+      const { generated } = await generateDummyOrders();
+      window.alert(`${generated} order dibuat. Wave baru akan muncul beberapa menit lagi (diproses otomatis tiap 10 menit) — bukan instan seperti sebelumnya.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Gagal membuat order demo.');
     } finally {
@@ -108,9 +99,9 @@ export default function ManagerPage() {
   return <main className="flex h-dvh flex-col gap-3 overflow-hidden bg-[#0a1a4b] p-3 text-[#202938] sm:p-5">
     <header className="mx-auto flex w-full max-w-[1600px] shrink-0 items-center justify-between rounded-md border border-white/15 px-4 py-2 text-white">
       <Image src="/logo-nexwave.svg" alt="nexWAVE Operations Control" width={210} height={54} priority />
-      <div className="flex items-center gap-3"><Typography variant="body2" sx={{ opacity: .8 }}>{profile?.full_name || profile?.email}</Typography><Button size="small" variant="outlined" onClick={() => token && loadDashboard(token)} sx={{ color: 'white', borderColor: 'rgba(255,255,255,.4)' }}>Muat ulang</Button><Button size="small" variant="outlined" startIcon={<LogoutIcon />} onClick={logout} sx={{ color: 'white', borderColor: 'rgba(255,255,255,.4)' }}>Keluar</Button></div>
+      <div className="flex items-center gap-3"><Typography variant="body2" sx={{ opacity: .8 }}>{profile?.full_name || profile?.email}</Typography><Button size="small" variant="outlined" onClick={loadDashboard} sx={{ color: 'white', borderColor: 'rgba(255,255,255,.4)' }}>Muat ulang</Button><Button size="small" variant="outlined" startIcon={<LogoutIcon />} onClick={logout} sx={{ color: 'white', borderColor: 'rgba(255,255,255,.4)' }}>Keluar</Button></div>
     </header>
-    {error ? <Box className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col items-center justify-center rounded-md bg-red-500/10 p-6 text-center text-white"><Typography variant="h6">Dashboard tidak tersedia</Typography><Typography sx={{ mt: 1, opacity: .8 }}>{error}</Typography><Button variant="contained" sx={{ mt: 2 }} onClick={() => token && loadDashboard(token)}>Coba lagi</Button></Box> : <div className="mx-auto grid min-h-0 w-full max-w-[1600px] flex-1 gap-3 lg:grid-cols-[340px_minmax(0,1fr)]">
+    {error ? <Box className="mx-auto flex w-full max-w-[1600px] flex-1 flex-col items-center justify-center rounded-md bg-red-500/10 p-6 text-center text-white"><Typography variant="h6">Dashboard tidak tersedia</Typography><Typography sx={{ mt: 1, opacity: .8 }}>{error}</Typography><Button variant="contained" sx={{ mt: 2 }} onClick={loadDashboard}>Coba lagi</Button></Box> : <div className="mx-auto grid min-h-0 w-full max-w-[1600px] flex-1 gap-3 lg:grid-cols-[340px_minmax(0,1fr)]">
       <aside className="min-h-0 overflow-y-auto rounded-md bg-[#f4f6fa] p-4">
         <p className="text-xs font-bold uppercase tracking-wider text-[#0056d6]">Manager dashboard</p><h1 className="mt-1 text-xl font-semibold">Wave aktif</h1>
         <div className="mt-4 grid grid-cols-2 gap-2">{[['Wave', summary?.n_waves], ['Aktif', summary?.waves_active], ['Selesai', summary?.waves_done], ['Item dipick', `${summary?.items_picked ?? 0}/${summary?.total_items ?? 0}`]].map(([label, value]) => <div key={String(label)} className="rounded border bg-white p-3"><p className="text-xs text-[#687386]">{label}</p><p className="mt-1 font-bold">{value}</p></div>)}</div>
