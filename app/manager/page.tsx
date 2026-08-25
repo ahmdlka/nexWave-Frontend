@@ -13,7 +13,6 @@ import { getActiveWaves, getCompletedWaves, getShiftSummary, getDueOrders, gener
 import { API_BASE_URL, apiHeaders, getApiError } from '@/lib/api';
 import { buildRouteLegs } from '@/lib/route-legs';
 import { supabase } from '@/lib/supabase';
-import { generateDummyOrders, getActiveWaves, getShiftSummary } from '@/lib/supabase-queries';
 
 type RouteStep = { id: number; location_id: string; product_ref: string; qty: number; floor: number; status: string; visit_order: number };
 type Wave = { wave_id: string; status: string; picker_name: string | null; total_items: number; total_distance: number; route: RouteStep[] };
@@ -38,6 +37,7 @@ function stepStatusStyle(status: string) {
 
 export default function ManagerPage() {
   const router = useRouter();
+  const [token, setToken] = useState<string | null>(null);
   const [profile, setProfile] = useState<ManagerProfile | null>(null);
   const [waves, setWaves] = useState<Wave[]>([]);
   const [summary, setSummary] = useState<ShiftSummary | null>(null);
@@ -87,6 +87,7 @@ export default function ManagerPage() {
         if (profileError) throw new Error(`Gagal mengambil profil manager: ${profileError.message}`);
         if (!userProfile || userProfile.role !== 'manager') return router.replace('/');
 
+        setToken(session.access_token);
         setProfile(userProfile);
         await loadDashboard();
       } catch (cause) {

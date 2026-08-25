@@ -19,7 +19,7 @@
 html {
   background: var(--navy-strong);
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 body {
@@ -30,7 +30,7 @@ body {
   font-size: 16px;
   line-height: 1.5;
   height: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .map-scroll-area {
