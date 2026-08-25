@@ -29,7 +29,7 @@ flowchart TD
     FE -- "1 login" --> AUTH
     AUTH -- "access_token" --> FE
     FE -- "2a wave/done" --> API
-    FE -- "2b generate-orders: INSERT (arrival_ts +5..20 menit)" --> DB
+    FE -- "2b generate-orders: INSERT (arrival_ts +1..15 menit)" --> DB
     FE -- "2c wave/active, picker/next, pick/confirm, wave/problem, shift/summary" --> DB
     API -- "3 verifikasi via JWKS publik" --> AUTH
     API --- ML
@@ -51,7 +51,7 @@ flowchart TD
    - **Langsung ke Supabase** (`generate-orders`, `wave/active`, `picker/next`, `pick/confirm`, `wave/problem`, `shift/summary`) — frontend query/insert tabel pakai client Supabase yang sudah login, **RLS row-scoped** (`schema.sql` STEP 7-8) yang jaga akses-nya, bukan kode backend. Detail: [frontend_auth.md](frontend_auth.md#7-operasi-langsung-ke-supabase-bukan-lewat-modal).
 3. **Dua sumber order, satu pipeline batching**:
    - **WMS asli** — `POST /api/order/new` (HMAC) → insert ke `orders` → PPO batching agent langsung putuskan `add`/`close_wave` saat itu juga (`arrival_ts` = sekarang).
-   - **Generate dummy (testing)** — manager `INSERT` langsung ke `orders` dari frontend (Supabase langsung, bukan lewat Modal), `arrival_ts` di-set acak 5-20 menit ke depan. `process_due_orders_cron` (Modal, jadwal tiap 10 menit) polling order yang `arrival_ts`-nya udah lewat, baru masuk ke PPO batching agent -- sama persis prosesnya dengan jalur WMS, cuma telat beberapa menit dan sekali proses bisa gabung banyak order at once.
+   - **Generate dummy (testing)** — manager `INSERT` langsung ke `orders` dari frontend (Supabase langsung, bukan lewat Modal), `arrival_ts` di-set acak 1-15 menit ke depan. `process_due_orders_cron` (Modal, jadwal tiap 10 menit) polling order yang `arrival_ts`-nya udah lewat, baru masuk ke PPO batching agent -- sama persis prosesnya dengan jalur WMS, cuma telat beberapa menit dan sekali proses bisa gabung banyak order at once.
    Kedua jalur berujung sama: wave yang closed dapat baris `wave_locations`, lalu di-assign ke picker available (rute dihitung Attention Routing Model + Nav graph).
 4. **Realtime** — perubahan di DB (dari proses batching di atas, atau langsung dari operator lewat query Supabase) otomatis sampai ke frontend yang subscribe lewat Supabase Realtime, tanpa polling.
 
@@ -84,7 +84,7 @@ fetch(`${API_URL}/...`, { headers: { Authorization: `Bearer ${session?.access_to
 | `POST /api/wave/problem` | operator / manager | Laporkan masalah di satu lokasi | **Supabase langsung** |
 | `POST /api/wave/done` | operator / manager | Tutup wave, minta wave berikutnya | Modal *(butuh Attention Routing buat wave berikutnya)* |
 | `GET /api/shift/summary` 🔒 | manager | Ringkasan shift hari ini | **Supabase langsung** |
-| `POST /rest/v1/orders` (`generate-orders`) 🔒 | manager | Generate order dummy (35-70 random), `arrival_ts` +5..20 menit | **Supabase langsung** |
+| `POST /rest/v1/orders` (`generate-orders`) 🔒 | manager | Generate order dummy (35-70 random), `arrival_ts` +1..15 menit | **Supabase langsung** |
 | `POST /api/dev/process-pending-orders` 🔒 | manager | Trigger manual proses order yang udah due (testing, tanpa nunggu cron) | Modal |
 
 Endpoint yang ditandai **Supabase langsung** (kecuali `generate-orders`, lihat catatan di bawah) MASIH ada di `modal_app.py` (nggak dihapus, aman buat testing lewat Postman/curl pakai Bearer token seperti biasa), tapi frontend production sebaiknya nggak manggil versi Modal-nya lagi — pakai query langsung ([frontend_auth.md](frontend_auth.md#7-operasi-langsung-ke-supabase-bukan-lewat-modal)), jauh lebih cepat (nggak ada extra hop + cold start Modal) buat operasi yang toh cuma SQL doang.
@@ -176,6 +176,8 @@ Response:
 (`next_wave` bisa `null` kalau tidak ada wave `forming` yang nunggu picker)
 `wave_id` invalid → `500` (pakai `wave_id` dari `/api/picker/{id}/next`, jangan diketik manual).
 
+Endpoint ini sendiri TIDAK berubah, tapi disarankan dipanggil SETELAH `supabase.rpc('close_own_wave', { p_wave_id })` (Supabase langsung, instant -- fungsi baru di `schema.sql` STEP 9) supaya operator lihat konfirmasi wave selesai tanpa nunggu Modal. Aman dipanggil dua-duanya berurutan -- endpoint ini re-set `status='done'` yang sama, idempotent. Detail: [frontend_wave_done_brief.md](frontend_wave_done_brief.md).
+
 ### `GET /api/shift/summary` — **Supabase langsung**, bukan Modal
 Angka agregat buat header dashboard manager (jumlah wave, item, jarak hari ini) — dihitung on-the-fly dari `waves`+`orders` hari itu. Nggak butuh Realtime, polling tiap 30 detik cukup. Cara query (filter range tanggal, bukan `DATE(created_at)`): [frontend_auth.md](frontend_auth.md#7-operasi-langsung-ke-supabase-bukan-lewat-modal).
 ```json
@@ -185,7 +187,7 @@ Angka agregat buat header dashboard manager (jumlah wave, item, jarak hari ini) 
 
 ### `POST /rest/v1/orders` (`generate-orders`) — **Supabase langsung**, bukan Modal sama sekali
 `POST` di sini ke REST API-nya Supabase sendiri (PostgREST), BUKAN ke `/api/...` kita — dipanggil otomatis oleh `supabase.from('orders').insert(...)`, gak ada URL yang perlu diketik manual.
-Dipanggil manager buat testing/demo — generate order dummy (35-70 random, `product_ref` dari `product_catalog`, `location_id` dari `locations`) langsung `INSERT` ke tabel `orders`, TANPA lewat backend/model. `arrival_ts` di-set acak **5-20 menit ke depan** (bukan sekarang) — order baru masuk ke PPO batching agent belakangan lewat `process_due_orders_cron` ([Arsitektur](#arsitektur)), bukan saat generate. Cara insert: [frontend_auth.md](frontend_auth.md#7-operasi-langsung-ke-supabase-bukan-lewat-modal). RLS `manager_insert_orders` yang jaga — operator kena RLS violation kalau coba insert.
+Dipanggil manager buat testing/demo — generate order dummy (35-70 random, `product_ref` dari `product_catalog`, `location_id` dari `locations`) langsung `INSERT` ke tabel `orders`, TANPA lewat backend/model. `arrival_ts` di-set acak **1-15 menit ke depan** (bukan sekarang) — order baru masuk ke PPO batching agent belakangan lewat `process_due_orders_cron` ([Arsitektur](#arsitektur)), bukan saat generate. Cara insert: [frontend_auth.md](frontend_auth.md#7-operasi-langsung-ke-supabase-bukan-lewat-modal). RLS `manager_insert_orders` yang jaga — operator kena RLS violation kalau coba insert.
 
 ### `POST /api/dev/process-pending-orders`
 Trigger manual buat `run_due_orders_cycle()` — fungsi yang SAMA yang otomatis jalan tiap 10 menit lewat `process_due_orders_cron` di Modal. Dipakai buat testing tanpa nunggu tick cron berikutnya (mis. abis `generate-orders`, mau langsung lihat hasilnya di dashboard). Nyari semua `orders` dengan `status='pending'`, `wave_id IS NULL`, `arrival_ts` udah lewat, proses lewat PPO batching agent, assign wave yang forming ke picker available.
@@ -194,4 +196,4 @@ Trigger manual buat `run_due_orders_cycle()` — fungsi yang SAMA yang otomatis 
   "batching_actions": { "add": 9, "close_wave": 3 },
   "waves_assigned": [{ "wave_id": "WAVE-DEMO-004", "picker_id": 3 }] }
 ```
-Nggak ada order due: `{ "status": "ok", "processed": 0, "batching_actions": {}, "waves_assigned": [] }`. `wave_id` di sini format UUID asli (`uuid.uuid4()`) — `"WAVE-DEMO-..."` di contoh lain di dokumen ini cuma penamaan dummy data buat gampang dibaca, lihat [dummy_data/](dummy_data/).
+Nggak ada order due: `{ "status": "ok", "processed": 0, "batching_actions": {}, "waves_assigned": [] }`. `wave_id` format `WAVE-001`, `WAVE-002`, ... (sequence di DB, lihat `schema.sql`) — beda dari `"WAVE-DEMO-..."` di contoh lain di dokumen ini yang cuma penamaan dummy seed data, lihat [dummy_data/](dummy_data/).

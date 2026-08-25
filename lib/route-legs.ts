@@ -36,14 +36,14 @@ export function buildRouteLegs(
   let fromNode = IO_NODE;
   let fromLocationId: string | undefined;
 
-  route.forEach((stop) => {
+  route.forEach((stop, index) => {
     const toNode = racks[stop.location_id]?.access_node;
     if (!toNode) return;
 
     const waypoints = pathFinder(fromNode, toNode);
     if (waypoints.length >= 2) {
       legs.push({
-        id: `pick-${stop.location_id}`,
+        id: `pick-${index}-${stop.location_id}`,
         fromNode,
         toNode,
         fromLocationId,
