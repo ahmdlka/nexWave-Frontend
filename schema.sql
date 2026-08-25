@@ -32,9 +32,14 @@ CREATE TABLE IF NOT EXISTS pickers (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- wave_id readable ("WAVE-001", "WAVE-002", ...) bukan UUID -- gampang
+-- disebut/diketik pas testing & di UI. nextval() atomic di Postgres, aman
+-- dipanggil concurrent dari beberapa request tanpa collision.
+CREATE SEQUENCE IF NOT EXISTS wave_id_seq;
+
 -- Waves: satu wave = satu perjalanan picker
 CREATE TABLE IF NOT EXISTS waves (
-  wave_id         TEXT PRIMARY KEY DEFAULT gen_random_uuid()::TEXT,
+  wave_id         TEXT PRIMARY KEY DEFAULT ('WAVE-' || lpad(nextval('wave_id_seq')::TEXT, 3, '0')),
   status          TEXT NOT NULL DEFAULT 'forming',
   -- status: forming | assigned | in_progress | done
   picker_id       INTEGER REFERENCES pickers(picker_id),
@@ -149,39 +154,49 @@ ALTER TABLE shift_log ENABLE ROW LEVEL SECURITY;
 -- "IF NOT EXISTS", jadi tanpa DROP ini schema.sql gagal kalau di-run ulang ke
 -- project yang sudah pernah kejalan.
 DROP POLICY IF EXISTS "service_all_locations" ON locations;
+
 CREATE POLICY "service_all_locations" ON locations FOR ALL TO service_role USING (true);
 
 DROP POLICY IF EXISTS "service_all_pickers" ON pickers;
+
 CREATE POLICY "service_all_pickers" ON pickers FOR ALL TO service_role USING (true);
 
 DROP POLICY IF EXISTS "service_all_waves" ON waves;
+
 CREATE POLICY "service_all_waves" ON waves FOR ALL TO service_role USING (true);
 
 DROP POLICY IF EXISTS "service_all_orders" ON orders;
+
 CREATE POLICY "service_all_orders" ON orders FOR ALL TO service_role USING (true);
 
 DROP POLICY IF EXISTS "service_all_wave_locations" ON wave_locations;
+
 CREATE POLICY "service_all_wave_locations" ON wave_locations FOR ALL TO service_role USING (true);
 
 DROP POLICY IF EXISTS "service_all_shift_log" ON shift_log;
+
 CREATE POLICY "service_all_shift_log" ON shift_log FOR ALL TO service_role USING (true);
 
 -- Frontend (anon key) hanya bisa SELECT -- policy ini sendiri di-drop lagi di
 -- STEP 6 (diganti authenticated_read_*), tapi tetap di-guard di sini biar
 -- STEP 4 doang juga aman di-run ulang sendirian.
 DROP POLICY IF EXISTS "anon_read_waves" ON waves;
+
 CREATE POLICY "anon_read_waves" ON waves FOR
 SELECT TO anon USING (true);
 
 DROP POLICY IF EXISTS "anon_read_wave_locations" ON wave_locations;
+
 CREATE POLICY "anon_read_wave_locations" ON wave_locations FOR
 SELECT TO anon USING (true);
 
 DROP POLICY IF EXISTS "anon_read_pickers" ON pickers;
+
 CREATE POLICY "anon_read_pickers" ON pickers FOR
 SELECT TO anon USING (true);
 
 DROP POLICY IF EXISTS "anon_read_orders" ON orders;
+
 CREATE POLICY "anon_read_orders" ON orders FOR
 SELECT TO anon USING (true);
 
@@ -189,6 +204,31 @@ SELECT TO anon USING (true);
 -- STEP 5: SEED DATA — 7 picker default (sesuai data operator riil)
 -- Ubah nama sesuai nama operator gudang
 -- ============================================================
+
+-- "ON CONFLICT DO NOTHING" di INSERT bawah TANPA target eksplisit itu
+-- NO-OP kalau nggak ada UNIQUE constraint yang bisa dilanggar -- picker_id
+-- SERIAL selalu dapat nilai baru (nggak pernah conflict), dan "name" nggak
+-- constrained. Verified: re-run INSERT ini 2x di Postgres kosong ("INSERT 0
+-- 2" DUA-DUANYA, bukan cuma sekali) -- artinya tiap kali schema.sql di-run
+-- ulang (skenario paling umum di sesi ini: nambah STEP baru tanpa drop
+-- tabel dulu), 7 baris picker DUPLIKAT baru ke-insert diam-diam, dengan
+-- picker_id baru (SERIAL jalan terus). create_dummy_operators.py yang
+-- hardcode picker_id 1..7 jadi salah sasaran -- link ke duplikat PERTAMA
+-- (id lama), bukan yang benar-benar dipakai. Constraint di bawah ini bikin
+-- ON CONFLICT (name) DO NOTHING di baris INSERT beneran berfungsi.
+-- ALTER TABLE ADD CONSTRAINT nggak support "IF NOT EXISTS" (beda dari DROP) --
+-- guard manual lewat pg_constraint, biar aman di-run ulang.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'pickers_name_key'
+    ) THEN
+        ALTER TABLE pickers ADD CONSTRAINT pickers_name_key UNIQUE (name);
+
+END IF;
+
+END $$;
+
 INSERT INTO
     pickers (name, status)
 VALUES ('Operator 1', 'available'),
@@ -197,7 +237,7 @@ VALUES ('Operator 1', 'available'),
     ('Operator 4', 'available'),
     ('Operator 5', 'available'),
     ('Operator 6', 'available'),
-    ('Operator 7', 'available') ON CONFLICT DO NOTHING;
+    ('Operator 7', 'available') ON CONFLICT (name) DO NOTHING;
 
 -- ============================================================
 -- STEP 6: AUTH — dua role, dua cara login, satu sistem (Supabase Auth)
@@ -224,20 +264,20 @@ VALUES ('Operator 1', 'available'),
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS users (
-    id         UUID PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
-    role       TEXT NOT NULL DEFAULT 'operator', -- operator | manager (naikkan manual, lihat catatan di bawah -- default paling rendah privilege-nya biar aman)
-    full_name  TEXT,
+    id UUID PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'operator', -- operator | manager (naikkan manual, lihat catatan di bawah -- default paling rendah privilege-nya biar aman)
+    full_name TEXT,
     avatar_url TEXT,
-    email      TEXT,
+    email TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 ALTER TABLE pickers
-    ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users (id);
+ADD COLUMN IF NOT EXISTS auth_user_id UUID REFERENCES auth.users (id);
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_pickers_auth_user
-    ON pickers (auth_user_id)
-    WHERE auth_user_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_pickers_auth_user ON pickers (auth_user_id)
+WHERE
+    auth_user_id IS NOT NULL;
 
 -- Auto-bikin baris users (public.users, BUKAN auth.users) begitu ada akun baru
 -- di auth.users. raw_user_meta_data buat provider Google isinya antara lain
@@ -297,9 +337,11 @@ CREATE TRIGGER on_auth_user_created
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "service_all_users" ON users;
+
 CREATE POLICY "service_all_users" ON users FOR ALL TO service_role USING (true);
 
 DROP POLICY IF EXISTS "authenticated_read_own_user" ON users;
+
 CREATE POLICY "authenticated_read_own_user" ON users FOR
 SELECT TO authenticated USING (auth.uid () = id);
 
@@ -327,15 +369,19 @@ ALTER POLICY "service_all_shift_log" ON shift_log TO service_role;
 -- masih pakai Supabase client yang belum login buat baca/subscribe tabel-tabel
 -- ini, itu bakal mulai kena RLS block setelah baris di bawah ini dijalankan.
 DROP POLICY IF EXISTS "anon_read_waves" ON waves;
+
 DROP POLICY IF EXISTS "authenticated_read_waves" ON waves;
 
 DROP POLICY IF EXISTS "anon_read_wave_locations" ON wave_locations;
+
 DROP POLICY IF EXISTS "authenticated_read_wave_locations" ON wave_locations;
 
 DROP POLICY IF EXISTS "anon_read_pickers" ON pickers;
+
 DROP POLICY IF EXISTS "authenticated_read_pickers" ON pickers;
 
 DROP POLICY IF EXISTS "anon_read_orders" ON orders;
+
 DROP POLICY IF EXISTS "authenticated_read_orders" ON orders;
 
 CREATE POLICY "authenticated_read_waves" ON waves FOR
@@ -348,6 +394,19 @@ CREATE POLICY "authenticated_read_pickers" ON pickers FOR
 SELECT TO authenticated USING (true);
 
 CREATE POLICY "authenticated_read_orders" ON orders FOR
+SELECT TO authenticated USING (true);
+
+-- locations kelewat di pass di atas -- satu-satunya tabel yang sebelum ini
+-- CUMA punya service_all_locations (service_role), nggak pernah dapat
+-- anon_read_*/authenticated_read_* kayak tabel lain. Nggak kenapa-napa
+-- selama semua akses lewat Modal (service_role, bypass RLS) -- tapi begitu
+-- frontend query locations LANGSUNG (generate-orders, atau embedded
+-- locations(x,y,z) di wave/active & picker/next, lihat frontend_auth.md
+-- STEP 7), authenticated dapat 0 baris, diam-diam. Data lokasi gudang bukan
+-- data sensitif/per-user, jadi blanket policy kayak product_catalog cukup.
+DROP POLICY IF EXISTS "authenticated_read_locations" ON locations;
+
+CREATE POLICY "authenticated_read_locations" ON locations FOR
 SELECT TO authenticated USING (true);
 
 -- ============================================================
@@ -388,25 +447,46 @@ $$ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public;
 -- nama baru sendiri (buat re-run STEP 7 ini berkali-kali, CREATE POLICY nggak
 -- support IF NOT EXISTS).
 DROP POLICY IF EXISTS "authenticated_read_waves" ON waves;
+
 DROP POLICY IF EXISTS "read_own_or_manager_waves" ON waves;
+
 CREATE POLICY "read_own_or_manager_waves" ON waves FOR
-SELECT TO authenticated USING (is_manager() OR picker_id = my_picker_id());
+SELECT TO authenticated USING (
+        is_manager ()
+        OR picker_id = my_picker_id ()
+    );
 
 -- wave_locations & orders: scope lewat waves.picker_id (JOIN), BUKAN kolom
 -- picker_id di tabel ini sendiri (lihat catatan di atas kenapa).
 DROP POLICY IF EXISTS "authenticated_read_wave_locations" ON wave_locations;
+
 DROP POLICY IF EXISTS "read_own_or_manager_wave_locations" ON wave_locations;
+
 CREATE POLICY "read_own_or_manager_wave_locations" ON wave_locations FOR
 SELECT TO authenticated USING (
-    is_manager() OR wave_id IN (SELECT wave_id FROM waves WHERE picker_id = my_picker_id())
-);
+        is_manager ()
+        OR wave_id IN (
+            SELECT wave_id
+            FROM waves
+            WHERE
+                picker_id = my_picker_id ()
+        )
+    );
 
 DROP POLICY IF EXISTS "authenticated_read_orders" ON orders;
+
 DROP POLICY IF EXISTS "read_own_or_manager_orders" ON orders;
+
 CREATE POLICY "read_own_or_manager_orders" ON orders FOR
 SELECT TO authenticated USING (
-    is_manager() OR wave_id IN (SELECT wave_id FROM waves WHERE picker_id = my_picker_id())
-);
+        is_manager ()
+        OR wave_id IN (
+            SELECT wave_id
+            FROM waves
+            WHERE
+                picker_id = my_picker_id ()
+        )
+    );
 
 -- Tulis buat pick/confirm & wave/problem (update status/picked_ts/problem_reason).
 -- Row-level doang -- operator pemilik wave ini SECARA TEKNIS bisa update kolom
@@ -416,10 +496,27 @@ SELECT TO authenticated USING (
 -- ubah wave operator LAIN), bukan proteksi lengkap dari operator ubah kolom
 -- yang harusnya cuma-baca buat dia sendiri.
 DROP POLICY IF EXISTS "operator_update_own_wave_locations" ON wave_locations;
-CREATE POLICY "operator_update_own_wave_locations" ON wave_locations FOR UPDATE
-TO authenticated
-USING (is_manager() OR wave_id IN (SELECT wave_id FROM waves WHERE picker_id = my_picker_id()))
-WITH CHECK (is_manager() OR wave_id IN (SELECT wave_id FROM waves WHERE picker_id = my_picker_id()));
+
+CREATE POLICY "operator_update_own_wave_locations" ON wave_locations FOR
+UPDATE TO authenticated USING (
+    is_manager ()
+    OR wave_id IN (
+        SELECT wave_id
+        FROM waves
+        WHERE
+            picker_id = my_picker_id ()
+    )
+)
+WITH
+    CHECK (
+        is_manager ()
+        OR wave_id IN (
+            SELECT wave_id
+            FROM waves
+            WHERE
+                picker_id = my_picker_id ()
+        )
+    );
 
 -- ============================================================
 -- STEP 8: "generate orders" jadi INSERT langsung dari frontend (Opsi B) --
@@ -436,30 +533,73 @@ WITH CHECK (is_manager() OR wave_id IN (SELECT wave_id FROM waves WHERE picker_i
 -- yang realistis (product_ref asal-asalan = fallback ke zero-vector di
 -- batching agent, bukan actually exercise GNN embedding-nya). Diisi SEKALI
 -- lewat seed_product_catalog.py (bukan manual), lihat file itu.
-CREATE TABLE IF NOT EXISTS product_catalog (
-    product_ref TEXT PRIMARY KEY
-);
+CREATE TABLE IF NOT EXISTS product_catalog (product_ref TEXT PRIMARY KEY);
 
 ALTER TABLE product_catalog ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "service_all_product_catalog" ON product_catalog;
+
 CREATE POLICY "service_all_product_catalog" ON product_catalog FOR ALL TO service_role USING (true);
 
 DROP POLICY IF EXISTS "authenticated_read_product_catalog" ON product_catalog;
+
 CREATE POLICY "authenticated_read_product_catalog" ON product_catalog FOR
 SELECT TO authenticated USING (true);
 
 -- Manager boleh INSERT order baru langsung (generate-orders dummy). Bukan
 -- UPDATE/DELETE -- itu tetap cuma service_role (lewat batching agent di Modal).
 DROP POLICY IF EXISTS "manager_insert_orders" ON orders;
-CREATE POLICY "manager_insert_orders" ON orders FOR INSERT
-TO authenticated WITH CHECK (is_manager());
+
+CREATE POLICY "manager_insert_orders" ON orders FOR
+INSERT
+    TO authenticated
+WITH
+    CHECK (is_manager ());
 
 -- Index buat query scheduled function: "cari order pending yang arrival_ts-nya
 -- udah lewat" -- tanpa ini, tiap tick cron bakal full table scan orders.
-CREATE INDEX IF NOT EXISTS idx_orders_due
-    ON orders (arrival_ts)
-    WHERE status = 'pending' AND wave_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_orders_due ON orders (arrival_ts)
+WHERE
+    status = 'pending'
+    AND wave_id IS NULL;
+
+-- ============================================================
+-- STEP 9: wave/done dipisah jadi 2 langkah -- close wave (instant, Supabase
+-- langsung) DULUAN, baru assign wave berikutnya (tetap Modal, butuh
+-- Attention Routing) belakangan. Operator TIDAK punya UPDATE langsung ke
+-- waves/pickers (cuma service_role, lihat STEP 4) -- RPC SECURITY DEFINER
+-- ini satu-satunya jalan operator nutup wave-nya sendiri, di-scope KETAT
+-- (cuma status='done'+finish_ts di waves, status='available'+current_wave_id
+-- di pickers -- BUKAN UPDATE bebas kayak policy biasa, operator nggak bisa
+-- reassign picker_id/ubah total_distance lewat jalur ini). Tested: picker
+-- lain/wave orang lain ditolak (RAISE EXCEPTION), manager bisa override,
+-- wave_id nggak valid gagal bersih -- lihat frontend_wave_done_brief.md.
+-- ============================================================
+CREATE OR REPLACE FUNCTION close_own_wave(p_wave_id TEXT)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_picker_id INTEGER;
+BEGIN
+    SELECT picker_id INTO v_picker_id FROM waves WHERE wave_id = p_wave_id;
+
+    IF v_picker_id IS NULL THEN
+        RAISE EXCEPTION 'wave % tidak ditemukan atau belum di-assign picker', p_wave_id;
+    END IF;
+
+    IF NOT is_manager() AND v_picker_id != my_picker_id() THEN
+        RAISE EXCEPTION 'forbidden: % bukan wave milik picker ini', p_wave_id;
+    END IF;
+
+    UPDATE waves SET status = 'done', finish_ts = NOW() WHERE wave_id = p_wave_id;
+    UPDATE pickers SET status = 'available', current_wave_id = NULL WHERE picker_id = v_picker_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION close_own_wave (TEXT) TO authenticated;
 
 -- ============================================================
 -- VERIFIKASI: jalankan query ini setelah schema selesai
@@ -468,3 +608,8 @@ CREATE INDEX IF NOT EXISTS idx_orders_due
 -- WHERE table_schema = 'public'
 -- ORDER BY table_name;
 -- Harus muncul: locations, orders, pickers, product_catalog, shift_log, users, wave_locations, waves
+
+DROP POLICY IF EXISTS "authenticated_read_locations" ON locations;
+
+CREATE POLICY "authenticated_read_locations" ON locations FOR
+SELECT TO authenticated USING (true);

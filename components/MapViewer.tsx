@@ -142,12 +142,12 @@ export default function MapViewer({ activeLevel, route, routeLegs, activeLegInde
               </g>
             ))}
 
-            {route.map((step) => {
+            {route.map((step, index) => {
               const rack = racks[step.location_id as keyof typeof racks];
               if (!rack) return null;
               const pinColor = step.status === 'picked' ? '#0056d6' : '#ff6600';
               return (
-                <g key={step.location_id} transform={`translate(${rack.actual_x - 12}, ${rack.actual_y - 24})`}>
+                <g key={`${index}-${step.location_id}`} transform={`translate(${rack.actual_x - 12}, ${rack.actual_y - 24})`}>
                   <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7Zm0 9.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" fill={pinColor} stroke="#ffffff" strokeWidth="2" />
                   <text x="12" y="-7" fontSize="13" fill="#202938" textAnchor="middle" fontWeight="700" paintOrder="stroke" stroke="#ffffff" strokeWidth="3">{step.location_id}</text>
                 </g>
