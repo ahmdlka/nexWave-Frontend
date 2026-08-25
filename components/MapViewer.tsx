@@ -7,9 +7,9 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { Box, IconButton, Paper, Tooltip, Typography } from '@mui/material';
 import mapData from '@/data/master_map_data.json';
 import { getCursorAnchoredScrollOffset, getMapCanvasSize } from '@/lib/map-viewport';
-import type { RouteLeg } from '@/lib/route-legs';
+import { getRouteLegState, type RouteLeg } from '@/lib/route-legs';
 
-type RouteStep = { location_id: string; status: string };
+type RouteStep = { route_item_id?: number; location_id: string; status: string };
 
 interface MapViewerProps {
   activeLevel: number;
@@ -134,12 +134,14 @@ export default function MapViewer({ activeLevel, route, routeLegs, activeLegInde
             <image href="/maps/Jalur_map.svg" x="0" y="0" width={VIEWBOX_WIDTH} height={VIEWBOX_HEIGHT} />
 
             {legSegments.map((segments, legIndex) => (
-              <g key={routeLegs[legIndex].id}>
-                {segments.map((segment, segmentIndex) => {
-                  const routeState = legIndex < activeLegIndex ? 'completed' : legIndex === activeLegIndex ? 'active' : 'future';
-                  return <line key={`${routeLegs[legIndex].id}-${segmentIndex}`} x1={segment.x1} y1={segment.y1} x2={segment.x2} y2={segment.y2} strokeWidth={routeState === 'active' ? 6 : 4} className={`route-line route-line--${routeState}`} />;
-                })}
-              </g>
+              (() => {
+                const routeState = getRouteLegState(legIndex, activeLegIndex);
+                if (routeState === 'completed') return null;
+
+                return <g key={routeLegs[legIndex].id}>
+                  {segments.map((segment, segmentIndex) => <line key={`${routeLegs[legIndex].id}-${segmentIndex}`} x1={segment.x1} y1={segment.y1} x2={segment.x2} y2={segment.y2} stroke={routeState === 'active' ? '#0056d6' : '#ff6600'} strokeWidth={routeState === 'active' ? 6 : 4} style={{ transition: 'stroke 240ms ease, opacity 240ms ease' }} />)}
+                </g>;
+              })()
             ))}
 
             {route.map((step, index) => {

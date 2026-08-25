@@ -20,6 +20,12 @@ export type RouteLeg = {
   waypoints: string[];
 };
 
+export function getRouteLegState(legIndex: number, activeLegIndex: number) {
+  if (legIndex < activeLegIndex) return 'completed' as const;
+  if (legIndex === activeLegIndex) return 'active' as const;
+  return 'future' as const;
+}
+
 export function buildRouteLegs(
   route: RouteStop[],
   racks: RackAccess,

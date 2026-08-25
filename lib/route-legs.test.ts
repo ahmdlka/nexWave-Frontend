@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { buildRouteLegs } from './route-legs';
+import { buildRouteLegs, getRouteLegState } from './route-legs';
 
 const racks = {
   'A-01': { access_node: 'A_NODE' },
@@ -45,4 +45,10 @@ test('keeps rack codes available for route labels instead of graph node IDs', ()
 
   assert.equal(completeLegs[1].fromLocationId, 'A-01');
   assert.equal(completeLegs.at(-1)?.fromLocationId, 'C-03');
+});
+
+test('classifies route legs before, at, and after the active position', () => {
+  assert.equal(getRouteLegState(0, 1), 'completed');
+  assert.equal(getRouteLegState(1, 1), 'active');
+  assert.equal(getRouteLegState(2, 1), 'future');
 });

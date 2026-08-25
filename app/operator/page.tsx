@@ -11,6 +11,7 @@ import { API_BASE_URL, apiHeaders, getApiError } from '@/lib/api';
 import { getPickerRoute, confirmPickDirect, reportProblemDirect, closeOwnWave } from '@/lib/supabase-queries';
 import { buildRouteLegs } from '@/lib/route-legs';
 import { supabase } from '@/lib/supabase';
+import { getPickerRoute } from '@/lib/supabase-queries';
 
 type RouteStep = { id: number; step: number; location_id: string; product_ref: string; qty: number; floor: number; status: 'pending' | 'active' | 'picked' | 'problem'; instruction: string };
 type PickerWave = { wave_id: string; status: string; total_items: number; total_distance: number; route: RouteStep[] };
@@ -87,11 +88,11 @@ export default function OperatorPage() {
     void initialise();
   }, [loadWave, router]);
 
-  const completed = useMemo(() => wave?.route.filter((step) => step.status === 'picked').length || 0, [wave]);
-  const activeStep = useMemo(() => wave?.route.find((step) => step.status === 'active' || step.status === 'pending'), [wave]);
-  const routeLegs = useMemo(() => wave ? buildRouteLegs(wave.route, mapData.racks, Boolean(wave.route.length && wave.route.every((step) => step.status === 'picked' || step.status === 'problem'))) : [], [wave]);
+  const completed = useMemo(() => wave?.route.filter((step) => step.status === 'picked' || step.status === 'problem').length || 0, [wave]);
+  const activeStep = useMemo(() => wave ? getActiveStep(wave.route) : undefined, [wave]);
+  const routeLegs = useMemo(() => wave ? buildRouteLegs(wave.route, mapData.racks, isChecklistComplete(wave.route)) : [], [wave]);
   const activeLegIndex = activeStep ? routeLegs.findIndex((leg) => leg.toLocationId === activeStep.location_id) : routeLegs.findIndex((leg) => leg.kind === 'return');
-  const canFinish = Boolean(wave?.route.length && wave.route.every((step) => step.status === 'picked' || step.status === 'problem'));
+  const canFinish = Boolean(wave && isChecklistComplete(wave.route));
 
   async function confirmPick() {
     if (!wave || !activeStep || !pickerId) return;
