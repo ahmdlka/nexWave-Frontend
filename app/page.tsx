@@ -87,6 +87,24 @@ export default function HomePage() {
     void routeUser();
   }, [router]);
 
+  useEffect(() => {
+    const revealElements = document.querySelectorAll<HTMLElement>('.reveal-on-scroll');
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12 },
+    );
+
+    revealElements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [authState]);
+
   if (authState === 'checking') {
     return <Box sx={{ display: 'flex', minHeight: '100dvh', alignItems: 'center', justifyContent: 'center', bgcolor: '#0a1a4b' }}><CircularProgress sx={{ color: 'white' }} /></Box>;
   }
@@ -98,7 +116,7 @@ export default function HomePage() {
         <div className="absolute right-[-8rem] top-12 h-64 w-64 rounded-full bg-[#0056d6]/20 blur-3xl sm:h-80 sm:w-80" />
         <div className="absolute bottom-[-6rem] left-[-3rem] h-52 w-52 rounded-full bg-[#ff6600]/10 blur-3xl sm:h-72 sm:w-72" />
         <Container maxWidth="lg" sx={{ position: 'relative', px: { xs: 2, sm: 3 }, pt: { xs: 3, md: 4 }, pb: { xs: 8, md: 12 } }}>
-          <header className="flex items-center justify-between gap-4 rounded-2xl border border-white/12 bg-white/6 px-4 py-3 backdrop-blur-sm">
+          <header className="reveal-on-scroll flex items-center justify-between gap-4 rounded-2xl border border-white/12 bg-white/6 px-4 py-3 backdrop-blur-sm">
             <Image src="/logo-nexwave.svg" alt="nexWAVE" width={172} height={42} priority />
             <Button
               variant="outlined"
@@ -118,6 +136,7 @@ export default function HomePage() {
             <div className="max-w-[640px]">
               <Chip
                 label="Warehouse Operations Control"
+                className="hero-reveal hero-reveal--1"
                 sx={{
                   mb: 3,
                   borderRadius: '999px',
@@ -128,13 +147,13 @@ export default function HomePage() {
                   letterSpacing: '.04em',
                 }}
               />
-              <Typography sx={{ fontSize: { xs: '2.8rem', md: '4.5rem' }, lineHeight: { xs: 1.02, md: 0.98 }, letterSpacing: '-0.05em', fontWeight: 800, maxWidth: '11ch' }}>
+              <Typography className="hero-reveal hero-reveal--2" sx={{ fontSize: { xs: '2.8rem', md: '4.5rem' }, lineHeight: { xs: 1.02, md: 0.98 }, letterSpacing: '-0.05em', fontWeight: 800, maxWidth: '11ch' }}>
                 Proses picking yang lebih cerdas.
               </Typography>
-              <Typography sx={{ mt: 3, maxWidth: '34rem', color: 'rgba(255,255,255,0.74)', fontSize: { xs: '1rem', md: '1.08rem' }, lineHeight: 1.8 }}>
+              <Typography className="hero-reveal hero-reveal--3" sx={{ mt: 3, maxWidth: '34rem', color: 'rgba(255,255,255,0.74)', fontSize: { xs: '1rem', md: '1.08rem' }, lineHeight: 1.8 }}>
                 NexWave menyatukan order batching dan picker routing untuk menekan perjalanan yang tidak perlu, tanpa menambah jumlah picker.
               </Typography>
-              <div className="mt-6 flex flex-wrap gap-3">
+              <div className="hero-reveal hero-reveal--4 mt-6 flex flex-wrap gap-3">
                 <Button
                   variant="contained"
                   endIcon={<NorthEastIcon />}
@@ -144,7 +163,9 @@ export default function HomePage() {
                     px: 3,
                     py: 1.4,
                     boxShadow: '0 18px 50px rgba(255,102,0,0.26)',
-                    '&:hover': { bgcolor: '#e35a00' },
+                    transition: 'transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease',
+                    '&:hover': { bgcolor: '#e35a00', transform: 'translateY(-2px)', boxShadow: '0 22px 54px rgba(255,102,0,0.32)' },
+                    '&:active': { transform: 'translateY(0) scale(0.98)' },
                   }}
                 >
                   Buka Operations Control
@@ -157,13 +178,15 @@ export default function HomePage() {
                     color: '#fff',
                     px: 3,
                     py: 1.4,
-                    '&:hover': { borderColor: '#fff', backgroundColor: 'rgba(255,255,255,0.05)' },
+                    transition: 'transform 180ms ease, background-color 180ms ease, border-color 180ms ease',
+                    '&:hover': { borderColor: '#fff', backgroundColor: 'rgba(255,255,255,0.05)', transform: 'translateY(-2px)' },
+                    '&:active': { transform: 'translateY(0) scale(0.98)' },
                   }}
                 >
                   Lihat overview
                 </Button>
               </div>
-              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+              <div className="hero-reveal hero-reveal--5 mt-8 grid gap-3 sm:grid-cols-3">
                 {[
                   ['Biaya order picking', 'Hingga 55%'],
                   ['Waktu untuk berjalan', 'Separuh proses'],
@@ -177,7 +200,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="relative">
+            <div className="reveal-on-scroll relative">
               <div className="absolute -inset-3 rounded-[2rem] bg-white/8 blur-2xl" />
               <div className="relative overflow-hidden rounded-[2rem] border border-white/12 bg-[#f4f6fa] p-4 text-[#202938] shadow-[0_30px_80px_rgba(4,12,38,0.45)] sm:p-5">
                 <div className="flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-[0_14px_30px_rgba(6,18,56,0.08)]">
@@ -204,7 +227,7 @@ export default function HomePage() {
                         alt="Preview jalur warehouse"
                         width={820}
                         height={560}
-                        className="h-auto w-full rounded-xl opacity-92"
+                        className="route-preview-image h-auto w-full rounded-xl opacity-92"
                       />
                     </div>
                     <div className="mt-4 flex items-center gap-2 text-sm text-white/72">
@@ -249,7 +272,7 @@ export default function HomePage() {
 
       <section id="overview" className="bg-[#f4f6fa] text-[#202938]">
         <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 }, py: { xs: 8, md: 10 } }}>
-          <div className="grid gap-5 lg:grid-cols-[0.88fr_1.12fr] lg:items-start">
+          <div className="reveal-on-scroll grid gap-5 lg:grid-cols-[0.88fr_1.12fr] lg:items-start">
             <div className="max-w-[30rem]">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#0056d6]">Masalah di warehouse</p>
               <Typography sx={{ mt: 1.5, fontSize: { xs: '2rem', md: '2.85rem' }, lineHeight: 1.03, letterSpacing: '-0.04em', fontWeight: 800 }}>
@@ -261,9 +284,9 @@ export default function HomePage() {
             </Typography>
           </div>
 
-          <div className="mt-8 grid gap-4 lg:grid-cols-3">
+          <div className="reveal-on-scroll mt-8 grid gap-4 lg:grid-cols-3">
             {featureCards.map((feature) => (
-              <div key={feature.title} className="rounded-[1.5rem] border border-[#d8dee8] bg-white p-5 shadow-[0_18px_50px_rgba(10,26,75,0.06)]">
+              <div key={feature.title} className="interactive-card rounded-[1.5rem] border border-[#d8dee8] bg-white p-5 shadow-[0_18px_50px_rgba(10,26,75,0.06)]">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#eaf2ff] text-[#0056d6]">
                   {feature.icon}
                 </div>
@@ -277,7 +300,7 @@ export default function HomePage() {
 
       <section className="bg-white text-[#202938]">
         <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3 }, py: { xs: 8, md: 10 } }}>
-          <div className="grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
+          <div className="reveal-on-scroll grid gap-6 lg:grid-cols-[0.92fr_1.08fr]">
             <div className="rounded-[1.75rem] bg-[#0a1a4b] p-6 text-white md:p-7">
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-white/70">Solusi NexWave</p>
               <Typography sx={{ mt: 1.5, fontSize: { xs: '2rem', md: '2.6rem' }, lineHeight: 1.04, letterSpacing: '-0.04em', fontWeight: 800, maxWidth: '10ch' }}>
@@ -297,7 +320,7 @@ export default function HomePage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               {roleCards.map((card) => (
-                <div key={card.title} className="rounded-[1.75rem] border border-[#d8dee8] bg-[#f4f6fa] p-6">
+                  <div key={card.title} className="interactive-card rounded-[1.75rem] border border-[#d8dee8] bg-[#f4f6fa] p-6">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-[#0056d6] shadow-[0_10px_25px_rgba(10,26,75,0.08)]">
                     {card.icon}
                   </div>
@@ -307,7 +330,7 @@ export default function HomePage() {
                 </div>
               ))}
 
-              <div className="rounded-[1.75rem] border border-[#d8dee8] bg-white p-6 md:col-span-2">
+              <div className="interactive-card rounded-[1.75rem] border border-[#d8dee8] bg-white p-6 md:col-span-2">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="max-w-[34rem]">
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#0056d6]">Action utama</p>
@@ -325,7 +348,9 @@ export default function HomePage() {
                       px: 3,
                       py: 1.35,
                       whiteSpace: 'nowrap',
-                      '&:hover': { bgcolor: '#0046b1' },
+                      transition: 'transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease',
+                      '&:hover': { bgcolor: '#0046b1', transform: 'translateY(-2px)', boxShadow: '0 12px 28px rgba(0,86,214,0.24)' },
+                      '&:active': { transform: 'translateY(0) scale(0.98)' },
                     }}
                   >
                     Masuk ke aplikasi
