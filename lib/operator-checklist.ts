@@ -13,6 +13,14 @@ export function updateActiveStepStatus<T extends ChecklistStep>(route: T[], stat
   return route.map((step) => step === activeStep ? { ...step, status } : step);
 }
 
+export function updateStepStatusById<T extends ChecklistStep & { id: number }>(
+  route: T[],
+  id: number,
+  status: 'picked' | 'problem',
+) {
+  return route.map((step) => step.id === id ? { ...step, status } : step);
+}
+
 export function isChecklistComplete(route: ChecklistStep[]) {
   return route.length > 0 && route.every((step) => step.status === 'picked' || step.status === 'problem');
 }

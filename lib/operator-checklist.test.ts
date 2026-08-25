@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { getActiveStep, isChecklistComplete, updateActiveStepStatus } from './operator-checklist';
+import { getActiveStep, isChecklistComplete, updateActiveStepStatus, updateStepStatusById } from './operator-checklist';
 
 const route = [
   { step: 1, location_id: 'A-01', status: 'pending' as const },
@@ -22,6 +22,23 @@ test('marks only the current actionable step in the local checklist', () => {
 test('treats picked and problem steps as locally complete', () => {
   assert.equal(isChecklistComplete([{ ...route[0], status: 'picked' }, { ...route[1], status: 'problem' }]), true);
   assert.equal(isChecklistComplete(route), false);
+});
+
+test('updates only the confirmed item when duplicate rack locations exist', () => {
+  const duplicateLocationRoute = [
+    { id: 11, step: 1, location_id: 'A-01', status: 'pending' as const },
+    { id: 12, step: 2, location_id: 'A-01', status: 'pending' as const },
+    { id: 13, step: 3, location_id: 'B-02', status: 'pending' as const },
+  ];
+
+  const updated = updateStepStatusById(duplicateLocationRoute, 11, 'picked');
+
+  assert.deepEqual(updated.map(({ id, location_id, status }) => [id, location_id, status]), [
+    [11, 'A-01', 'picked'],
+    [12, 'A-01', 'pending'],
+    [13, 'B-02', 'pending'],
+  ]);
+  assert.equal(getActiveStep(updated)?.id, 12);
 });
 
 test('operator page does not reference deprecated checklist endpoints', async () => {
